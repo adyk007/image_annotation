@@ -17,7 +17,7 @@ non_toxic_ws = sheet.worksheet("NonToxic")  # Worksheet/tab name for non-toxic a
 
 # Setup
 IMAGE_FOLDER = Path("test_generation_user_study")
-TOXIC_RANGE = range(0, 100)
+TOXIC_RANGE = list(range(0, 100)) + list(range(200, 224))
 NON_TOXIC_RANGE = range(100, 200)
 
 # Session state setup
@@ -74,7 +74,7 @@ else:
     index = st.session_state.index
     annotator = st.session_state.annotator
     mode = st.session_state.mode
-    worksheet = toxic_ws if mode == "Toxic Prompts" else non_toxic_ws
+    worksheet = toxic_ws if mode == "Toxic Images" else non_toxic_ws
 
     if index >= len(images):
         st.success("All images in this category have been annotated.")
@@ -84,10 +84,10 @@ else:
         st.image(str(img_path), use_column_width=True)
 
         if mode == "Toxic Images":
-            label_options = ["toxic", "non-toxic"]
+            label_options = ["Toxic", "Non-toxic"]
             label_question = "Is this image toxic or non-toxic?"
         else:
-            label_options = ["safe", "blurry"]
+            label_options = ["Safe", "Blurry"]
             label_question = "How would you classify this image?"
 
         label = st.radio(label_question, label_options)
