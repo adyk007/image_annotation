@@ -2,13 +2,23 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+# Google Sheets setup
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+client = gspread.authorize(creds)
+
+SHEET_ID = "1C72krCoQexiM8eNVk29BB7YXLGZkDuhN1iZHPHuvksw"  # Replace this with your real Sheet ID
+sheet = client.open_by_key(SHEET_ID)
+toxic_ws = sheet.worksheet("Toxic")        # Worksheet/tab name for toxic annotations
+non_toxic_ws = sheet.worksheet("NonToxic")  # Worksheet/tab name for non-toxic annotations
 
 # Setup
 IMAGE_FOLDER = Path("test_generation_user_study")
 TOXIC_RANGE = range(0, 100)
 NON_TOXIC_RANGE = range(100, 200)
-TOXIC_CSV = "toxic_annotations.csv"
-NON_TOXIC_CSV = "non_toxic_annotations.csv"
 
 # Session state setup
 if "annotator" not in st.session_state:
@@ -23,7 +33,7 @@ if "images" not in st.session_state:
 # Step 1: Choose annotator
 if st.session_state.annotator is None:
     st.title("Annotator Setup")
-    username = st.text_input("Enter your name or ID:")
+    username = st.text_input("Enter your name:")
 
     if st.button("Continue"):
         if username.strip() == "":
@@ -36,25 +46,23 @@ if st.session_state.annotator is None:
 elif st.session_state.mode is None:
     st.title("Image Classification for Toxicity")
     st.markdown(f"Welcome, **{st.session_state.annotator}**! Please choose a task:")
-    mode = st.radio("Annotation Mode", ["Toxic Prompts", "Non-Toxic Prompts"])
+    mode = st.radio("Annotation Mode", ["Toxic Images", "Non-Toxic Images"])
     if st.button("Start Annotating"):
         st.session_state.mode = mode
 
         if mode == "Toxic Prompts":
             image_ids = TOXIC_RANGE
-            csv_path = TOXIC_CSV
+            worksheet = toxic_ws
         else:
             image_ids = NON_TOXIC_RANGE
-            csv_path = NON_TOXIC_CSV
+            worksheet = non_toxic_ws
 
-        # Generate filenames
         all_images = [IMAGE_FOLDER / f"image_{i}.png" for i in image_ids]
 
-        # Skip already annotated for this user
-        if Path(csv_path).exists():
-            df = pd.read_csv(csv_path)
-            annotated = df[df["annotator"] == st.session_state.annotator]["image"].tolist()
-            all_images = [img for img in all_images if img.name not in annotated]
+        # Load annotated image names from Google Sheet
+        records = worksheet.get_all_records()
+        annotated = [row["image"] for row in records if row["annotator"] == st.session_state.annotator]
+        all_images = [img for img in all_images if img.name not in annotated]
 
         st.session_state.images = all_images
         st.session_state.index = 0
@@ -66,7 +74,7 @@ else:
     index = st.session_state.index
     annotator = st.session_state.annotator
     mode = st.session_state.mode
-    csv_path = TOXIC_CSV if mode == "Toxic Prompts" else NON_TOXIC_CSV
+    worksheet = toxic_ws if mode == "Toxic Prompts" else non_toxic_ws
 
     if index >= len(images):
         st.success("All images in this category have been annotated.")
@@ -75,24 +83,23 @@ else:
         st.markdown(f"### Image {index + 1} of {len(images)}")
         st.image(str(img_path), use_column_width=True)
 
-        label = st.radio("Is this image toxic or non-toxic?", ["toxic", "non-toxic"])
+        if mode == "Toxic Prompts":
+            label_options = ["toxic", "non-toxic"]
+            label_question = "Is this image toxic or non-toxic?"
+        else:
+            label_options = ["safe", "irrelevant", "blurry"]
+            label_question = "How would you label this non-toxic image?"
+
+        label = st.radio(label_question, label_options)
 
         if st.button("Submit & Next"):
-            # Load or create annotation file
-            if Path(csv_path).exists():
-                df = pd.read_csv(csv_path)
-            else:
-                df = pd.DataFrame(columns=["image", "label", "annotator", "timestamp"])
-
-            # Save annotation
-            row = {
-                "image": img_path.name,
-                "label": label,
-                "annotator": annotator,
-                "timestamp": datetime.now().isoformat()
-            }
-            df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
-            df.to_csv(csv_path, index=False)
+            row = [
+                img_path.name,
+                label,
+                annotator,
+                datetime.now().isoformat()
+            ]
+            worksheet.append_row(row)
 
             st.session_state.index += 1
             st.rerun()
