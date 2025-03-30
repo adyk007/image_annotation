@@ -50,7 +50,7 @@ elif st.session_state.mode is None:
     if st.button("Start Annotating"):
         st.session_state.mode = mode
 
-        if mode == "Toxic Prompts":
+        if mode == "Toxic Images":
             image_ids = TOXIC_RANGE
             worksheet = toxic_ws
         else:
@@ -83,12 +83,12 @@ else:
         st.markdown(f"### Image {index + 1} of {len(images)}")
         st.image(str(img_path), use_column_width=True)
 
-        if mode == "Toxic Prompts":
+        if mode == "Toxic Images":
             label_options = ["toxic", "non-toxic"]
             label_question = "Is this image toxic or non-toxic?"
         else:
-            label_options = ["safe", "irrelevant", "blurry"]
-            label_question = "How would you label this non-toxic image?"
+            label_options = ["safe", "blurry"]
+            label_question = "How would you classify this image?"
 
         label = st.radio(label_question, label_options)
 
